@@ -1,0 +1,32 @@
+.page {
+	padding: 13px 0 29px;
+}
+ul.yiiPager{
+	border:0 none;
+	display:inline;
+	line-height:21px;
+}
+ul.yiiPager a {
+	vertical-align:baseline;
+}
+ul.yiiPager .page a:hover{color:#FF6600;border:1px solid #9AAFE5;}
+ul.yiiPager .selected a:link, ul.yiiPager .selected a:visited{
+   border: 1px solid #A3A3A3;
+   background:#2298F0;
+   color: #FFF;
+}
+ul.yiiPager .next a:link, ul.yiiPager .next a:visited{
+	border:0 none;
+	background:none;
+	margin-left:5px;
+}
+{color:#FF6600;border:0 none;background:none;}
+
+
+ul.yiiPager .previous a:link, ul.yiiPager .previous a:visited, ul.yiiPager .last a:link, ul.yiiPager .last a:visited, ul.yiiPager .first a:link, ul.yiiPager .first a:visited{
+	border:0 none;
+	background:none;
+}
+
+ul.yiiPager .previous a:hover, ul.yiiPager .next a:hover, ul.yiiPager .first a:hover, ul.yiiPager .last a:hover{color:#FF6600;border:0 none;background:none;}
+

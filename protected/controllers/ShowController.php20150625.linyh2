@@ -1,0 +1,520 @@
+<?php
+
+class ShowController extends Controller
+{
+	private $mod  = 'Livestock';
+	
+	public function actionUploadImg(){
+		$conn = Yii::app()->db2; //获取数据库连接对象;
+		$this->layout = "//layouts/column1";
+		    $images = new Images("file");
+			$path = $_POST['path'];
+			if ($_GET['act'] == 'cut'){	
+				$path_arr = explode("//",$path);
+				$image = "/home/httpd/".$path_arr[1];
+				$res = $images->thumb($image,false,1);
+				if($res == false){
+					echo "裁剪失败";
+				}elseif(is_array($res)){
+					$res['big'] = "http://images.cnfol.com/stock/".basename($res['big']);
+					$res['small'] = "http://images.cnfol.com/stock/".basename($res['small']);
+					echo '<img src="'.$res['big'].'" style="display: none; margin:10px;">';
+					echo '<img id=\'smallImg\' src="'.$res['big'].'" style="display: none; margin:10px;">';
+				}elseif(is_string($res)){
+					echo '<img src="'.$res.'">';
+				}
+			}elseif(isset($_GET['act']) && $_GET['act'] == "upload"){
+				$path = $images->move_uploaded();
+				$path = str_replace('//', '/', $path);
+				$images->thumb($path,false,0);//文件比规定的尺寸大则生成缩略图，小则保持原样
+			if($path == false){
+				$images->get_errMsg();
+			}else{
+				/*存入图片库*/
+				//获取用户真实姓名
+				$url = Yii::app()->params['url'];
+	 			$soap = new SoapClient($url);
+		    	$user_info=$soap->get_userinfo($_COOKIE["Usr_ID"]);
+		    	
+		    	$realname = $user_info["Usr_RealName"];
+				preg_match('/(.+)(\.[^\.]+)$/', $_FILES["file"], $temp);
+				
+				$info_arrs = pathinfo($path);//图片文件信息
+				$base = pathinfo(basename($path));
+				
+				$name       = "暂无图片说明哦";
+				$fname      = $base["filename"];
+				$classid    = 27;
+				$type       = strtolower($info_arrs["extension"]);
+				$minetype   = $_FILES["file"]['type'];
+				$size       = $_FILES["file"]['size'];
+				$createdtime= time();
+				$lastupdate = time();
+				$uploaduser = $realname;
+				
+				$insert_sql = "INSERT INTO pic (`id`,`name`,`filename`,`classid`,`type`,`mimetype`,`size`,`createdtime`,`lastupdate`,`uploaduser`) 
+		                                VALUES (
+		                                NULL , '$name', '$fname', '$classid','$type','$minetype','$size','$createdtime','$lastupdate','$realname'
+		                                );";
+				$r = $conn->createCommand( $insert_sql )->execute();
+				$path = "http://images.cnfol.com/stock/".basename($path) ;
+			}
+		}
+			$this->render('imgUp',array('path'=>$path));
+	}
+	
+	public function actionIndex()
+	{
+		$this->render('index');
+	}
+
+	// Uncomment the following methods and override them if needed
+	/*
+	public function filters()
+	{
+		// return the filter configuration for this controller, e.g.:
+		return array(
+			'inlineFilterName',
+			array(
+				'class'=>'path.to.FilterClass',
+				'propertyName'=>'propertyValue',
+			),
+		);
+	}
+
+	public function actions()
+	{
+		// return external action classes, e.g.:
+		return array(
+			'action1'=>'path.to.ActionClass',
+			'action2'=>array(
+				'class'=>'path.to.AnotherActionClass',
+				'propertyName'=>'propertyValue',
+			),
+		);
+	}
+	*/
+	
+	
+	public function actionShowlist(){
+				$this->layout = "//layouts/column3";
+				
+	/*判断权限*/
+		$add = $edit = $del = true;
+		$ModID = Yii::app()->params['Permission']['show']['module'];//模块ID
+		$AddID = Yii::app()->params['Permission']['show']['Addshow'];//添加功能
+		$EditID = Yii::app()->params['Permission']['show']['Saveshow'];//编辑功能
+		$DelID = Yii::app()->params['Permission']['show']['Delshow'];//删除功能
+		
+		$_msg = CloudIdentify::checkAction($ModID,array($AddID,$EditID,$DelID));//检验用户是否有权
+		$all = $_msg[0];//所有的错误代码
+		if($all[0]!=1){//没有权限  添加
+			$add = false;
+		}
+		if($all[1]!=1){//没有权限  修改
+			$edit = false;
+		}
+		if($all[2]!=1){//没有权限  删除
+			$del = false;
+		}
+		
+		        $params = (isset($_GET)&& !empty($_GET))?$_GET:'';//搜索参数
+		        $page = isset($_GET['page']) ? intval($_GET['page']) : 1;//初始值
+				$pagesize = isset($_GET['pagesize']) ? intval($_GET['pagesize']) : Yii::app()->params['postsPerPage'];
+		        $show = new Rs_show();
+		        $data = $show->showList($params,$page,$pagesize);
+		        $showclass = new Rs_class();
+	            $classlist =$showclass->getclasslist();
+	            $user = new Rs_user();
+	            $userlist =$user->getuserlist();
+				if(isset($_GET)&& !empty($_GET)){
+				 /*写日志*/	
+				$param = array(
+				'mid'=>77,//在云平台上的模块id
+				'gid'=>1,//在云平台上的功能id
+				'type'=>4,//操作类型
+				'url'=>'http://roadshow.cloud.cnfol.com'.yii::app()->createUrl('Show/Showlist'),//操作地址
+				'node'=>'路演管理-搜索',//操作说明
+				);
+				$r = CloudIdentify::addLog($param);//写入日志	
+				}
+		        $this->render('LuyList',array(
+	                                    'count'=>$data['count'],
+	                                    'showList'=>$data['list'],
+		                                'classlist'=>$classlist,
+		                                'userlist'=>$userlist,
+	                                    'pages'=>$data['pager'],
+									    'pagesize'=>$pagesize,
+									    'currentPage'=>$page,
+		       			 				'add'=>$add,
+								        'edit'=>$edit,
+								        'del'=>$del, 
+	                          ));  
+	                          
+			}
+			
+    /*auther by yuexl
+	 * date 2012-7-6
+	 * description:删除路演
+	 */
+    public function actionDelshow(){
+			$id = Yii::app()->getRequest()->getPost("id");/*要删除的记录ID*/
+			$ids=  explode( ',',$id);
+		    foreach ($ids as $showid) {
+		    	if(is_numeric($showid)){
+		    	$model = Rs_show::model()->findByPk($showid);
+				$return = $model->Delshow($showid);
+		     }
+		    }
+			if( $return ){
+			    /*写日志*/	
+				$param = array(
+				'mid'=>77,//在云平台上的模块id
+				'gid'=>2,//在云平台上的功能id
+				'type'=>3,//操作类型
+				'url'=>'http://roadshow.cloud.cnfol.com'.yii::app()->createUrl('Show/Showlist'),//操作地址
+				'node'=>'路演管理-删除',//操作说明
+				);
+				$r = CloudIdentify::addLog($param);//写入日志	
+				$result = array('errorno'=>'000','msg'=>'');
+			}else{
+				$result = array('errorno'=>'405','msg'=>'删除失败,请重试!');
+			}
+			echo json_encode($result);
+	}
+	
+   /*desciption:验证路演名称是否已经存在
+	 * @params   $name 路演名称  字符串
+	 * */
+	public function actioncheckisexist(){
+		$re = Rs_show::model()->checkNameIsExist( Yii::app()->getRequest()->getPost("Name") );
+		if( $re ){
+			$msg = '该路演已存在';
+			$errorno = '405';
+		}else{
+			$msg = '';
+			$errorno = '000';
+		}
+		echo json_encode(array('errorno'=>$errorno,'msg'=>$msg));
+	}
+	
+	
+	public function actionAddshow(){
+			$obj = new stdClass();
+			$request = Yii::app()->getRequest();
+			$show = new Rs_show();
+//			
+		    $topic = trim ( $request->getPost ( "Addtopic" ) );	
+		    $starttime = strtotime(trim ( $request->getPost ( "Astarttime" ) ));
+		    $endtime = strtotime(trim ( $request->getPost ( "Aendtime" ) ));
+		    $showip = trim ( $request->getPost ( "Ashowip" ) );
+		    $descurl = trim ( $request->getPost ( "Adescurl" ) );
+		    $memo = trim ( $request->getPost ( "Amemo" ) );	
+		    $addtime = time();
+		    $onlinenum1 = trim ( $request->getPost ( "Aonlinenum1" ) );
+		    $onlinenum2 = trim ( $request->getPost ( "Aonlinenum2" ) );
+		    $corpdesc = trim ( $request->getPost ( "Acorpdesc" ) );
+		    $procdesc = trim ( $request->getPost ( "Aprocdesc" ) );
+		    $historydesc = trim ( $request->getPost ( "Ahistorydesc" ) );
+		    $showcorp = trim ( $request->getPost ( "Ashowcorp" ) );
+		    $showproc = trim ( $request->getPost ( "Ashowproc" ) );
+		    $showhistory = trim ( $request->getPost ( "Ashowhistory" ) );	
+		    $topicpic = trim($request->getPost("Atopicpic"));//照片
+//		   	$topicpic =  "http://images.cnfol.com/articles/".$pic;
+			$showdesc = trim ( $request->getPost ( "Ashowdesc" ) );
+		    $channlename = trim ( $request->getPost ( "Achannlename" ) );
+		    $channlelink = trim ( $request->getPost ( "Achannlelink" ) );
+		    $hits = trim ( $request->getPost ( "Ahits" ) );
+			$addtime = time();
+		    $classid=trim ( $request->getPost ( "Aclassids" ) );
+		    $userid = trim ( $request->getPost ( "Auserids" ) );
+//  				    
+				$sid = $show->addShow($topic,$starttime,$endtime,$showip,$descurl,$memo,$addtime,$onlinenum1,$onlinenum2,$corpdesc,$procdesc,$historydesc,$showcorp,$showproc,$showhistory,$topicpic,$showdesc,$channlename,$channlelink,$hits);
+				if($sid){
+				/*写日志*/	
+				$param = array(
+				'mid'=>77,//在云平台上的模块id
+				'gid'=>1,//在云平台上的功能id
+				'type'=>1,//操作类型
+				'url'=>'http://roadshow.cloud.cnfol.com'.yii::app()->createUrl('Show/Showlist'),//操作地址
+				'node'=>'路演管理-添加',//操作说明
+				);
+				$r = CloudIdentify::addLog($param);//写入日志	
+				$obj->errorno = '1000';
+				$obj->error = '添加成功!'; 
+				}else{
+					$obj->error = '添加失败!';
+				}
+				if(!empty($classid)){
+				$ids=  explode( ',',$classid);
+				    foreach ($ids as $showid) {
+				    	if(is_numeric($showid)){
+				    	Rs_show_class::model()->addShowclass($sid,$showid,$addtime);
+				     }
+				    }		
+				}
+				
+				if(!empty($userid)){
+					$m=  explode( ',',$userid);
+					       $i=0;
+						    foreach ($m as $n) {						    	
+						    	if(is_numeric($n)){
+							    	$ret = Rs_user::model()->checkuserisadmin($n);									    
+						           }
+						           if($ret[0]['isadmin'] == 1)	{
+									    $i++;
+									    } 							           				           
+						        }
+						        if($i>=1){
+                                      foreach ($m as $uid) {
+	                                      	if(is_numeric($uid)){
+								    	            $ret = Rs_user::model()->checkuserisadmin($uid);
+	                                      	}
+						                    Rs_show_user::model()->addShowuser($sid,$ret[0]['cid'],$uid);
+                                         }
+						           }else{
+						           	 $obj->errorno = '1001';
+						             $obj->error = '所邀请的嘉宾中必须包含一位主持人!';
+						           }	         
+				}
+				
+				
+				echo json_encode ( $obj );
+		
+		}
+		
+		
+		
+		public function actionGetshowmsg(){
+		    $obj = new stdClass ();
+			$showMsg = $showDetail = array ();
+			$request = Yii::app ()->getRequest ();
+			if ($request->getPost ( "Id" )) {	
+				$showMsg = Rs_show::model ()->findByPk($request->getPost ( "Id" ));
+				if ($showMsg) {
+					$showDetail = array (
+					$showMsg->id, 
+					$showMsg->topic, 
+					$showMsg->topicpic,
+					$showMsg->starttime,
+					$showMsg->endtime,
+					$showMsg->showip,
+					$showMsg->descurl,
+					$showMsg->showdesc,
+					$showMsg->historydesc,
+					$showMsg->showhistory,
+					$showMsg->corpdesc,
+					$showMsg->showcorp,
+					$showMsg->procdesc,
+					$showMsg->showproc,
+					$showMsg->channlename,				
+					$showMsg->channlelink,
+					$showMsg->onlinenum1,
+					$showMsg->onlinenum2,
+					$showMsg->memo,
+					$showMsg->hits,
+					);
+					$obj->errorno = '000';
+					$obj->content = implode ( '|', $showDetail );
+					$obj->classlist = Rs_show_class::model()->showclasslist($showMsg->id);
+					$obj->userlist = Rs_show_user::model()->showuserlist($showMsg->id);
+				} else {
+					$obj->errorno = '001';
+					$obj->content = '参数错误';
+				}
+			}
+			echo json_encode ( $obj );
+	}
+	
+	
+		public function actionSaveshow(){
+			        $obj = new stdClass ();
+					$request = Yii::app ()->getRequest ();
+					$id = $request->getPost ( "aid" );
+					$topic = trim ( $request->getPost ( "edittopic" ) );	
+				    $starttime = strtotime(trim ( $request->getPost ( "estarttime" ) ));
+				    $endtime = strtotime(trim ( $request->getPost ( "eendtime" ) ));
+				    $showip = trim ( $request->getPost ( "eshowip" ) );
+				    $descurl = trim ( $request->getPost ( "edescurl" ) );
+				    $memo = trim ( $request->getPost ( "ememo" ) );	
+				    $addtime = time();
+				    $onlinenum1 = trim ( $request->getPost ( "eonlinenum1" ) );
+				    $onlinenum2 = trim ( $request->getPost ( "eonlinenum2" ) );
+				    $corpdesc = trim ( $request->getPost ( "ecorpdesc" ) );
+				    $procdesc = trim ( $request->getPost ( "eprocdesc" ) );
+				    $historydesc = trim ( $request->getPost ( "ehistorydesc" ) );
+				    $showcorp = trim ( $request->getPost ( "eshowcorp" ) );
+				    $showproc = trim ( $request->getPost ( "eshowproc" ) );
+				    $showhistory = trim ( $request->getPost ( "eshowhistory" ) );	
+				    $topicpic =	trim($request->getPost("etopicpic"));//照片
+//					$topicpic =  "http://images.cnfol.com/articles/".$pic;
+				    $showdesc = trim ( $request->getPost ( "eshowdesc" ) );
+				    $channlename = trim ( $request->getPost ( "echannlename" ) );
+				    $channlelink = trim ( $request->getPost ( "echannlelink" ) );
+				    $hits = trim ( $request->getPost ( "ehits" ) );
+					$addtime = time();
+				    $classid=trim ( $request->getPost ( "eclassids" ) );
+				    $userid = trim ( $request->getPost ( "euserids" ) );
+					$model = new Rs_show();
+					$ret =  $model->modShow($id,$topic,$starttime,$endtime,$showip,$descurl,$memo,$addtime,$onlinenum1,$onlinenum2,$corpdesc,$procdesc,$historydesc,$showcorp,$showproc,$showhistory,$topicpic,$showdesc,$channlename,$channlelink,$hits);
+					
+					PublicAction::addtocache("$id._info_mod", time(),'roadshow_');
+					   if($ret){
+					   /*写日志*/	
+						$param = array(
+						'mid'=>77,//在云平台上的模块id
+						'gid'=>3,//在云平台上的功能id
+						'type'=>2,//操作类型
+						'url'=>'http://roadshow.cloud.cnfol.com'.yii::app()->createUrl('Show/Showlist'),//操作地址
+						'node'=>'路演管理-修改',//操作说明
+						);
+						$r = CloudIdentify::addLog($param);//写入日志	
+					   $obj->errorno = '1000';
+					    $obj->error = '修改成功!';
+                       }else {    	
+                       	$obj->error = '修改失败!';
+                       }
+					
+				if(!empty($classid)){
+					Rs_show_class::model()->Delshowclass($id);
+						$ids=  explode( ',',$classid);
+						    foreach ($ids as $showid) {
+						    	if(is_numeric($showid)){
+						    	Rs_show_class::model()->addShowclass($id,$showid,$addtime);
+						     }
+						    }		
+						}
+//						
+			if(!empty($userid)){
+				Rs_show_user::model()->Delshowuser($id);
+				        $i = 0;
+						$m=  explode( ',',$userid);
+							    foreach ($m as $n) {						    	
+							    	if(is_numeric($n)){
+								    	$ret = Rs_user::model()->checkuserisadmin($n);									    
+							           }
+							           if($ret[0]['isadmin'] == 1)	{
+										    $i++;
+										    } 							           				           
+							        }
+							        if($i>=1){
+	                                      foreach ($m as $uid) {
+		                                      	if(is_numeric($uid)){
+									    	            $ret = Rs_user::model()->checkuserisadmin($uid);
+		                                      	}
+							                    Rs_show_user::model()->addShowuser($id,$ret[0]['cid'],$uid);
+	                                         }
+							           }else{
+							           	$obj->errorno = '1001';
+							           	$obj->error = '所邀请的嘉宾中必须包含一位主持人!';
+							           }	         
+					}
+//					
+					echo json_encode ( $obj );
+			}
+	
+			
+		public function actionShowclasslist(){
+			$this->layout = "//layouts/column3";
+			/*判断权限*/
+			$add = $edit = $del = true;
+			$ModID = Yii::app()->params['Permission']['show']['module'];//模块ID
+			$AddID = Yii::app()->params['Permission']['show']['Addshow'];//添加功能
+			$EditID = Yii::app()->params['Permission']['show']['Saveshow'];//编辑功能
+			$DelID = Yii::app()->params['Permission']['show']['Delshow'];//删除功能
+			
+			$_msg = CloudIdentify::checkAction($ModID,array($AddID,$EditID,$DelID));//检验用户是否有权
+			$all = $_msg[0];//所有的错误代码
+			if($all[0]!=1){//没有权限  添加
+				$add = false;
+			}
+			if($all[1]!=1){//没有权限  修改
+				$edit = false;
+			}
+			if($all[2]!=1){//没有权限  删除
+				$del = false;
+			}
+	            $params = (isset($_GET)&& !empty($_GET))?$_GET:'';//搜索参数
+		        $page = isset($_GET['page']) ? intval($_GET['page']) : 1;//初始值
+				$pagesize = isset($_GET['pagesize']) ? intval($_GET['pagesize']) : Yii::app()->params['postsPerPage'];
+		        $show = new Rs_show_class();
+		        $data = $show->showList($params,$page,$pagesize);
+		        $showclass = new Rs_class();
+	            $classlist =$showclass->getclasslist();
+	            $user = new Rs_user();
+	            $userlist =$user->getuserlist();
+	            $sign = 1;
+		        $this->render('LuyList',array(
+	                                    'count'=>$data['count'],
+	                                    'showList'=>$data['list'],
+		                                'classlist'=>$classlist,
+		                                'userlist'=>$userlist,
+	                                    'pages'=>$data['pager'],
+									    'pagesize'=>$pagesize,
+									    'currentPage'=>$page,
+								        'edit'=>$edit,
+								        'del'=>$del, 
+		                                'sign'=>$sign
+	                          ));  
+	                          
+			}
+/*description:信息详情展示
+	 * */
+	public function actionLookInfo(){
+		$this->layout = "//layouts/column3";
+			$id = '';
+			if(isset($_GET["id"])&& $_GET["id"]){
+				$id = $_GET["id"];
+			}
+			$this->loadModel($id);
+			$info = Rs_show::model()->getInfoById($id,1);
+			$showclass = new Rs_class();
+	        $classlist =$showclass->getclasslist();
+	        $user = new Rs_user();
+	        $userlist =$user->getuserlist();   
+	         if ($id) {	
+				$showMsg = Rs_show::model ()->findByPk($id);
+				if ($showMsg) {
+					$content = array (
+					$showMsg->id, 
+					$showMsg->topic, 
+					$showMsg->topicpic,
+					$showMsg->starttime,
+					$showMsg->endtime,
+					$showMsg->showip,
+					$showMsg->descurl,
+					$showMsg->showdesc,
+					$showMsg->historydesc,
+					$showMsg->showhistory,
+					$showMsg->corpdesc,
+					$showMsg->showcorp,
+					$showMsg->procdesc,
+					$showMsg->showproc,
+					$showMsg->channlename,
+					
+					$showMsg->channlelink,
+					$showMsg->onlinenum1,
+					$showMsg->onlinenum2,
+					$showMsg->memo,
+					$showMsg->hits,
+					);
+					$class = Rs_show_class::model()->showclasslist($showMsg->id);
+					$user  =  Rs_show_user::model()->showuserlist($showMsg->id);
+				} 
+			}
+			$this->render('XsMor',array(
+									'classlist'=>$classlist,
+			                         'userlist'=>$userlist,
+			                         'class'=>$class,
+			                         'user'=>$user,
+			                         'content'=>$content));
+	}
+	
+		public function loadModel($id)
+			{
+				$model= Rs_show::model()->findByPk($id);
+				if($model===null)
+					throw new CHttpException(404,'请求的页面不存在，请重试！');
+				return $model;
+			}
+}
